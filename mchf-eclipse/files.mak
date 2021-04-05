@@ -12,6 +12,8 @@ hardware/uhsdr_hw_i2c.c \
 hardware/uhsdr_hmc1023.c \
 hardware/uhsdr_keypad.c \
 hardware/uhsdr_rtc.c \
+hardware/codec_w8731.c \
+hardware/uhsdr_hw_i2s.c \
 drivers/usb/device/class/composite/usbd_composite.c \
 drivers/usb/device/class/composite/usbd_composite_desc.c \
 drivers/usb/device/class/CDC/Src/usbd_cdc.c \
@@ -142,8 +144,6 @@ drivers/audio/filters/iq_tx_filter.c \
 drivers/audio/cw/uhsdr_digi_buffer.c \
 drivers/audio/cw/cw_gen.c \
 drivers/audio/cw/cw_decoder.c \
-drivers/audio/codec/codec.c \
-drivers/audio/codec/uhsdr_hw_i2s.c \
 drivers/audio/audio_agc.c \
 drivers/audio/audio_driver.c \
 drivers/audio/audio_filter.c \

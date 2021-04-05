@@ -43,7 +43,7 @@
 #include "drivers/ui/oscillator/osc_interface.h"
 #include "drivers/ui/oscillator/osc_si5351a.h"
 #include "drivers/ui/oscillator/osc_si570.h"
-#include "drivers/audio/codec/codec.h"
+#include "hardware/codec.h"
 #include "misc/profiling.h"
 #include "uhsdr_canary.h"
 #include "audio_agc.h"
