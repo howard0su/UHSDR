@@ -372,7 +372,7 @@ void decr_wrap_uint16(volatile uint16_t* ptr, uint16_t min, uint16_t max )
 
 bool is_touchscreen_pressed()
 {
-	return (ts.tp->state == TP_DATASETS_VALID);	// touchscreen data available
+	return UiLcdHy28_TouchScreenHasData();	// touchscreen data available
 }
 
 bool is_vfo_b()
@@ -5743,7 +5743,8 @@ static void UiDriver_TouchscreenCalibrationRun()
 static bool UiDriver_TouchscreenCalibration()
 {
 	bool retval = false;
-	uint16_t MAX_X=ts.Layout->Size.x; uint16_t MAX_Y=ts.Layout->Size.y;
+	uint16_t MAX_X=ts.Layout->Size.x;
+	uint16_t MAX_Y=ts.Layout->Size.y;
 
     bool run_calibration = false;
 

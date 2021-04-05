@@ -14,6 +14,7 @@ hardware/uhsdr_keypad.c \
 hardware/uhsdr_rtc.c \
 hardware/codec_w8731.c \
 hardware/uhsdr_hw_i2s.c \
+hardware/touch.c \
 drivers/usb/device/class/composite/usbd_composite.c \
 drivers/usb/device/class/composite/usbd_composite_desc.c \
 drivers/usb/device/class/CDC/Src/usbd_cdc.c \
