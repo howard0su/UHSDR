@@ -50,14 +50,14 @@ inline mchf_cpu_t MchfHW_Cpu()
 #endif
 
 #if defined(STM32H7)
-    #define GPIO_SetBits(PORT,PINS) { (PORT)->BSRRL = (PINS); }
-    #define GPIO_ResetBits(PORT,PINS) { (PORT)->BSRRH = (PINS); }
+    #define GPIO_SetBits(PORT,PINS) { (PORT)->BSRRL = (PINS); }while(0)
+    #define GPIO_ResetBits(PORT,PINS) { (PORT)->BSRRH = (PINS); }while(0)
 #elif defined(STM32F7) || defined(STM32F4)
-    #define GPIO_SetBits(PORT,PINS) { (PORT)->BSRR = (PINS); }
-    #define GPIO_ResetBits(PORT,PINS) { (PORT)->BSRR = (PINS) << 16U; }
+    #define GPIO_SetBits(PORT,PINS) { (PORT)->BSRR = (PINS); }while(0)
+    #define GPIO_ResetBits(PORT,PINS) { (PORT)->BSRR = (PINS) << 16U; }while(0)
 #endif
 
-#define GPIO_ToggleBits(PORT,PINS) { (PORT)->ODR ^= (PINS); }
-#define GPIO_ReadInputDataBit(PORT,PINS) { ((PORT)->IDR = (PINS); }
+#define GPIO_ToggleBits(PORT,PINS) { (PORT)->ODR ^= (PINS); }while(0)
+#define GPIO_ReadInputDataBit(PORT,PINS) { ((PORT)->IDR = (PINS); }while(0)
 
 #endif
