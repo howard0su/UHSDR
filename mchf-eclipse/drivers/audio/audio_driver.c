@@ -2951,6 +2951,41 @@ static void AudioDriver_IqFillSilence(IqSample_t *s, size_t size)
     memset(s,0,size*sizeof(*s));
 }
 
+typedef struct
+{
+    IqSample_t out[2*IQ_BLOCK_SIZE];
+    IqSample_t in[2*IQ_BLOCK_SIZE];
+} dma_iq_buffer_t;
+
+typedef struct
+{
+    AudioSample_t out[2*AUDIO_BLOCK_SIZE];
+    AudioSample_t in[2*AUDIO_BLOCK_SIZE];
+} dma_audio_buffer_t;
+
+
+// we do something tricky here:
+// if we have a single codec both buffers are in fact the same, so we use a union
+// if we have two codecs we use a struct hence two separate buffers
+
+typedef
+#if CODEC_NUM == 1
+    union
+#else
+    struct
+#endif
+    {
+        dma_iq_buffer_t iq_buf;
+        dma_audio_buffer_t audio_buf;
+    } I2S_DmaBuffers_t;
+
+static __UHSDR_DMAMEM I2S_DmaBuffers_t dma;
+
+static void AudioDriver_ClearTxBuffer()
+{
+    memset((void*)&dma.iq_buf.out, 0, sizeof(dma.iq_buf.out));
+}
+
 //*----------------------------------------------------------------------------
 //* Function Name       : I2S_RX_CallBack
 //* Object              :
@@ -2959,7 +2994,7 @@ static void AudioDriver_IqFillSilence(IqSample_t *s, size_t size)
 //* Output Parameters   :
 //* Functions called    :
 //*----------------------------------------------------------------------------
-void AudioDriver_I2SCallback(AudioSample_t *audio, IqSample_t *iq, AudioSample_t *audioDst, int16_t blockSize)
+static void AudioDriver_I2SCallback(AudioSample_t *audio, IqSample_t *iq, AudioSample_t *audioDst, int16_t blockSize)
 {
     static bool to_rx = false;	// used as a flag to clear the RX buffer
     static bool to_tx = false;	// used as a flag to clear the TX buffer
@@ -2978,7 +3013,7 @@ void AudioDriver_I2SCallback(AudioSample_t *audio, IqSample_t *iq, AudioSample_t
             AudioDriver_IqFillSilence(iq, blockSize);
             if (to_rx)
             {
-                UhsdrHwI2s_Codec_ClearTxDmaBuffer();
+                AudioDriver_ClearTxBuffer();
             }
             if ( ts.audio_processor_input_mute_counter >0)
             {
@@ -3048,4 +3083,78 @@ void AudioDriver_I2SCallback(AudioSample_t *audio, IqSample_t *iq, AudioSample_t
 #endif
 }
 
+// #define PROFILE_APP
+void AudioDriver_HandleBlock(uint16_t which)
+{
+#ifdef PROFILE_EVENTS
+    // we stop during interrupt
+    // at the end we start again
+#ifdef PROFILE_APP
+    profileCycleCount_stop();
+#else
+    profileTimedEventStart(ProfileAudioInterrupt);
+#endif
+#endif
 
+#ifdef EXEC_PROFILING
+    // Profiling pin (high level)
+    GPIOE->BSRRL = GPIO_Pin_10;
+#endif
+
+    ts.audio_int_counter++;   // generating a time base for encoder handling
+
+    // Transfer complete interrupt
+    // Point to 2nd half of buffers
+    const size_t sz = IQ_BLOCK_SIZE;
+    const uint16_t offset = which == 0?sz:0;
+
+    AudioSample_t *audio;
+    IqSample_t    *iq;
+
+    if (ts.txrx_mode != TRX_MODE_TX)
+    {
+        iq = &dma.iq_buf.in[offset];
+        audio = &dma.audio_buf.out[offset];
+    }
+    else
+    {
+        audio = &dma.audio_buf.in[offset];
+        iq = &dma.iq_buf.out[offset];
+    }
+
+    AudioSample_t *audioDst = &dma.audio_buf.out[offset];
+
+    // Handle
+    AudioDriver_I2SCallback(audio, iq, audioDst, sz);
+
+#ifdef EXEC_PROFILING
+    // Profiling pin (low level)
+    GPIOE->BSRRH = GPIO_Pin_10;
+#endif
+#ifdef PROFILE_EVENTS
+    // we stopped during interrupt
+    // now we start again
+#ifdef PROFILE_APP
+    profileCycleCount_start();
+#else
+    profileTimedEventStop(ProfileAudioInterrupt);
+#endif
+#endif
+}
+
+void AudioDriver_Start(void)
+{
+    // we clean the buffers since we don't know if we are in a "cleaned" memory segement
+    memset((void*)&dma.audio_buf,0,sizeof(dma.audio_buf));
+    memset((void*)&dma.iq_buf,0,sizeof(dma.iq_buf));
+
+    UhsdrHwI2s_Codec_StartDMA(
+        dma.audio_buf.out,dma.audio_buf.in,sizeof(dma.audio_buf.in)/sizeof(dma.audio_buf.in[0].l),
+        dma.iq_buf.out,dma.iq_buf.in,sizeof(dma.iq_buf.in)/sizeof(dma.iq_buf.in[0].l)
+    );
+}
+
+void AudioDriver_Stop(void)
+{
+    UhsdrHwI2s_Codec_StopDMA();
+}

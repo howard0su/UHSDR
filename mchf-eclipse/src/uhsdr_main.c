@@ -432,8 +432,7 @@ int mchfMain(void)
     UiDriver_SetDemodMode(ts.dmod_mode);
 
     // Finally, start DMA transfers to get everything going
-    UhsdrHwI2s_Codec_StartDMA();
-
+    AudioDriver_Start();
 
     // now enable paddles/ptt, i.e. external input
     ts.paddles_active = true;

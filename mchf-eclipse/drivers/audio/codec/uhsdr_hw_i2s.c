@@ -28,109 +28,13 @@
 #include "sai.h"
 #endif
 
-
-typedef struct
-{
-    IqSample_t out[2*IQ_BLOCK_SIZE];
-    IqSample_t in[2*IQ_BLOCK_SIZE];
-} dma_iq_buffer_t;
-
-typedef struct
-{
-    AudioSample_t out[2*AUDIO_BLOCK_SIZE];
-    AudioSample_t in[2*AUDIO_BLOCK_SIZE];
-} dma_audio_buffer_t;
-
-
-// we do something tricky here:
-// if we have a single codec both buffers are in fact the same, so we use a union
-// if we have two codecs we use a struct hence two separate buffers
-
-typedef
-#if CODEC_NUM == 1
-    union
-#else
-    struct
-#endif
-    {
-        dma_iq_buffer_t iq_buf;
-        dma_audio_buffer_t audio_buf;
-    } I2S_DmaBuffers_t;
-
-static __UHSDR_DMAMEM I2S_DmaBuffers_t dma;
-
-
-void UhsdrHwI2s_Codec_ClearTxDmaBuffer()
-{
-    memset((void*)&dma.iq_buf.out, 0, sizeof(dma.iq_buf.out));
-}
-
-// #define PROFILE_APP
-static void MchfHw_Codec_HandleBlock(uint16_t which)
-{
-#ifdef PROFILE_EVENTS
-    // we stop during interrupt
-    // at the end we start again
-#ifdef PROFILE_APP
-    profileCycleCount_stop();
-#else
-    profileTimedEventStart(ProfileAudioInterrupt);
-#endif
-#endif
-
-#ifdef EXEC_PROFILING
-    // Profiling pin (high level)
-    GPIOE->BSRRL = GPIO_Pin_10;
-#endif
-
-    ts.audio_int_counter++;   // generating a time base for encoder handling
-
-    // Transfer complete interrupt
-    // Point to 2nd half of buffers
-    const size_t sz = IQ_BLOCK_SIZE;
-    const uint16_t offset = which == 0?sz:0;
-
-    AudioSample_t *audio;
-    IqSample_t    *iq;
-
-    if (ts.txrx_mode != TRX_MODE_TX)
-    {
-        iq = &dma.iq_buf.in[offset];
-        audio = &dma.audio_buf.out[offset];
-    }
-    else
-    {
-        audio = &dma.audio_buf.in[offset];
-        iq = &dma.iq_buf.out[offset];
-    }
-
-    AudioSample_t *audioDst = &dma.audio_buf.out[offset];
-
-    // Handle
-    AudioDriver_I2SCallback(audio, iq, audioDst, sz);
-
-#ifdef EXEC_PROFILING
-    // Profiling pin (low level)
-    GPIOE->BSRRH = GPIO_Pin_10;
-#endif
-#ifdef PROFILE_EVENTS
-    // we stopped during interrupt
-    // now we start again
-#ifdef PROFILE_APP
-    profileCycleCount_start();
-#else
-    profileTimedEventStop(ProfileAudioInterrupt);
-#endif
-#endif
-}
-
 #ifdef UI_BRD_MCHF
 /**
  * @brief HAL Handler for Codec DMA Interrupt
  */
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
 {
-    MchfHw_Codec_HandleBlock(0);
+    AudioDriver_HandleBlock(0);
 }
 
 /**
@@ -138,7 +42,7 @@ void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
  */
 void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 {
-    MchfHw_Codec_HandleBlock(1);
+    AudioDriver_HandleBlock(1);
 }
 #endif
 
@@ -147,18 +51,15 @@ void HAL_SAI_RxCpltCallback(SAI_HandleTypeDef *hi2s)
 {
     if (hi2s == &hsai_BlockA2)
     {
-        MchfHw_Codec_HandleBlock(0);
+        AudioDriver_HandleBlock(0);
     }
 }
-
-
-
 
 void HAL_SAI_RxHalfCpltCallback(SAI_HandleTypeDef *hi2s)
 {
     if (hi2s == &hsai_BlockA2)
     {
-        MchfHw_Codec_HandleBlock(1);
+        AudioDriver_HandleBlock(1);
     }
 }
 #endif
@@ -196,25 +97,22 @@ static void UhsdrHwI2s_SetBitWidth()
 #endif
 }
 
-
-
-void UhsdrHwI2s_Codec_StartDMA()
+void UhsdrHwI2s_Codec_StartDMA(
+    void* audio_out, void* audio_in, size_t audio_length,
+    void* iq_out, void* iq_in, size_t iq_length
+)
 {
     UhsdrHwI2s_SetBitWidth();
 
 #ifdef UI_BRD_MCHF
-    HAL_I2SEx_TransmitReceive_DMA(&hi2s3,(uint16_t*)dma.iq_buf.out,(uint16_t*)dma.iq_buf.in,sizeof(dma.iq_buf.in)/sizeof(dma.iq_buf.in[0].l));
+    HAL_I2SEx_TransmitReceive_DMA(&hi2s3,iq_out,iq_in,iq_length);
 #endif
 #ifdef UI_BRD_OVI40
-    // we clean the buffers since we don't know if we are in a "cleaned" memory segement
-    memset((void*)&dma.audio_buf,0,sizeof(dma.audio_buf));
-    memset((void*)&dma.iq_buf,0,sizeof(dma.iq_buf));
+    HAL_SAI_Receive_DMA(&hsai_BlockA1,audio_in,audio_length);
+    HAL_SAI_Transmit_DMA(&hsai_BlockB1,audio_out,audio_length);
 
-    HAL_SAI_Receive_DMA(&hsai_BlockA1,(uint8_t*)dma.audio_buf.in,sizeof(dma.audio_buf.in)/sizeof(dma.audio_buf.in[0].l));
-    HAL_SAI_Transmit_DMA(&hsai_BlockB1,(uint8_t*)dma.audio_buf.out,sizeof(dma.audio_buf.out)/sizeof(dma.audio_buf.out[0].l));
-
-    HAL_SAI_Receive_DMA(&hsai_BlockA2,(uint8_t*)dma.iq_buf.in,sizeof(dma.iq_buf.in)/sizeof(dma.iq_buf.in[0].l));
-    HAL_SAI_Transmit_DMA(&hsai_BlockB2,(uint8_t*)dma.iq_buf.out,sizeof(dma.iq_buf.out)/sizeof(dma.iq_buf.out[0].l));
+    HAL_SAI_Receive_DMA(&hsai_BlockA2,iq_in,iq_length);
+    HAL_SAI_Transmit_DMA(&hsai_BlockB2,iq_out,iq_length);
 
 #endif
 }
